@@ -1,0 +1,124 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>四季頻寬測試</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=on">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/raphael/2.1.0/raphael-min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.min.js"></script>
+    <script src="JQSpeedTest.js"></script>
+<script>
+var getRequest = function() {
+	var obj = {};
+	var uri = location.search;
+	if(uri) {
+		var name = uri.replace('?', '').split("&");
+		for (var i = 0; i < name.length; i++) {
+			obj[name[i].split('=')[0]] = name[i].split('=')[1] || '';
+		}
+		return obj;
+	}
+	return null;
+};
+function calcAverage(num1,num2){
+    if(num2 == 0){
+        return num1;
+    }else if(num1 == 0){
+        return num2;
+    }else{
+        return ((parseFloat(num1)+parseFloat(num2))/2).toFixed(2)
+    }
+}
+</script>
+</head>
+<body onkeydown="onKeyDown(event)">
+
+    <div id="speed-graph" style="height: 250px;"></div>
+    <button type="button" class="" id="startBtn">Start</button>
+    <button type="button" class="" id="stopBtn">Stop</button>
+
+<script>
+(function() {
+    var $startBtn = $("#startBtn");
+    var $stopBtn = $("#stopBtn");
+
+    /** Chart Data init **/
+    var chartData;
+    function initData() {
+        chartData = [];
+        chartData.push({
+            x: new Date().getTime(),
+            y: '0'
+        });
+    }
+    initData();
+    
+    /** Morris Chart **/
+    var speedGraph = Morris.Line({
+        element: 'speed-graph',
+        data: chartData,
+        xkey: 'x',
+        ykeys: ['y'],
+        labels: ['Response time'],
+        parseTime: true,
+        ymin: 'auto',
+        ymax: 'auto',
+        postUnits: ' ms',
+        hideHover: true
+    });
+
+    $startBtn.click(function(e){
+        $startBtn.hide();
+        $stopBtn.show();
+        initData();
+        speedGraph.setData(chartData);
+
+        jqSTest = new JQSpeedTest({
+            testImageUrl: 'http://test-cds.cdn.hinet.net/test_010m.zip',
+            testImageSize: 10503578,
+            countDlSamples:0,
+            countReSamples:100,
+            returnUnits: false,
+            testStateCallback: callBackFunState,
+            testFinishCallback: callBackFunFinish,
+            testReCallback: callBackFunRe,
+        });
+    });
+    $stopBtn.click(function(e){
+        jqSTest.state('forcestop');
+    });
+
+    function callBackFunState(value) {
+        console.log(value);
+    }
+
+    function callBackFunFinish(value) {
+        $startBtn.show();
+        $stopBtn.hide();
+    }
+    $stopBtn.hide();
+
+    /** Call Back Function for Response Time **/
+    function callBackFunRe(val){
+        if(val>300) val = 300; // Little Hack
+        chartData.push({
+            x: new Date().getTime(),
+            y: val
+        });
+        speedGraph.setData(chartData);
+    }
+})();
+
+function onKeyDown(event) {
+//     var code = event.which || event.keyCode;
+//     console.log(code);
+//     switch(code) {
+//     }
+}
+
+</script>
+
+</body>
+</html>
