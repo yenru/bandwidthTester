@@ -4,11 +4,13 @@
     <title>四季頻寬測試</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=on">
-    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.css">
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.css" />
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/raphael/2.1.0/raphael-min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.min.js"></script>
-    <script src="JQSpeedTest.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/canvg/1.5/canvg.min.js"></script>
+    <script src="//unpkg.com/jspdf@latest/dist/jspdf.min.js"></script>
 <script>
 var getRequest = function() {
 	var obj = {};
@@ -33,16 +35,25 @@ function calcAverage(num1,num2){
 }
 </script>
 </head>
-<body onkeydown="onKeyDown(event)">
+<body>
 
+    <h1>四季線上影視測速工具</h1>
+    <p id="statusMsg"></p>
     <div id="speed-graph" style="height: 250px;"></div>
-    <button type="button" class="" id="startBtn">Start</button>
-    <button type="button" class="" id="stopBtn">Stop</button>
+    <div id="buttonBar">
+        <button id="startBtn">開始測速</button>
+        <button id="stopBtn">停止測速</button>
+        <button id="downloadBtn">下載結果</button>
+    </div>
+    <br /><canvas id="canvas"></canvas>
 
 <script>
 (function() {
+    var speedStatus = 0;    //0:關閉中; 1:開啟中
     var $startBtn = $("#startBtn");
     var $stopBtn = $("#stopBtn");
+    var $statusMsg = $("#statusMsg");
+    var $downloadBtn = $("#downloadBtn");
 
     /** Chart Data init **/
     var chartData;
@@ -65,7 +76,7 @@ function calcAverage(num1,num2){
         parseTime: true,
         ymin: 'auto',
         ymax: 'auto',
-        postUnits: ' ms',
+        postUnits: ' s',
         hideHover: true
     });
 
@@ -75,49 +86,63 @@ function calcAverage(num1,num2){
         initData();
         speedGraph.setData(chartData);
 
-        jqSTest = new JQSpeedTest({
-            testImageUrl: 'http://test-cds.cdn.hinet.net/test_010m.zip',
-            testImageSize: 10503578,
-            countDlSamples:0,
-            countReSamples:100,
-            returnUnits: false,
-            testStateCallback: callBackFunState,
-            testFinishCallback: callBackFunFinish,
-            testReCallback: callBackFunRe,
-        });
+        $statusMsg.text("開始測速。第一次下載可能速度較慢，請耐心等候。");
+        speedStatus = 1;
+        TestResponse();
+        $downloadBtn.hide();
     });
-    $stopBtn.click(function(e){
-        jqSTest.state('forcestop');
-    });
-
-    function callBackFunState(value) {
-        console.log(value);
-    }
-
-    function callBackFunFinish(value) {
+    $stopBtn.click(testStop);
+    function testStop() {
+        speedStatus = 0;
         $startBtn.show();
         $stopBtn.hide();
-    }
-    $stopBtn.hide();
+        if(chartData.length > 1) {
+            $statusMsg.text("測試結束。");
+            $downloadBtn.show();
+        }
+        else {
+            $statusMsg.text("沒有下載任何檔案，請耐心等候一段時間。");
+        }
+    };
+    $downloadBtn.click(function(e){
+        var svg = $("#speed-graph").html();
+        var canvas = document.getElementById('canvas');
+        canvg(canvas, svg.split("<div")[0]);
 
-    /** Call Back Function for Response Time **/
-    function callBackFunRe(val){
-        if(val>300) val = 300; // Little Hack
-        chartData.push({
-            x: new Date().getTime(),
-            y: val
+        var imgData = canvas.toDataURL('image/png');
+        var doc = new jsPDF('l', 'mm');
+        doc.addImage(imgData, 'PNG', 10, 10);
+        doc.save('speedtest-result.pdf');
+    });
+    
+    // var fileSize = 10503578;
+    function TestResponse() {
+        var sendDate = Date.now();
+        const request = new Request('http://test-cds.cdn.hinet.net/test_010m.zip', {cache: "no-store"});
+
+        fetch(request).then(res => res.blob().then(blob => {
+            var receiveDate = Date.now();
+            var response = receiveDate - sendDate;
+
+            testCallback(response);
+        }))
+        .catch(function(err) {
+            testStop();
+            $statusMsg.html("<span class=\"error\">發生錯誤，請參考錯誤訊息："+err.message+"<span>");
         });
-        speedGraph.setData(chartData);
+    }
+
+    function testCallback(val) {
+        if(speedStatus == 1) {
+            TestResponse();
+            chartData.push({
+                x: new Date().getTime(),
+                y: (val / 1000).toFixed(2)
+            });
+            speedGraph.setData(chartData);
+        }
     }
 })();
-
-function onKeyDown(event) {
-//     var code = event.which || event.keyCode;
-//     console.log(code);
-//     switch(code) {
-//     }
-}
-
 </script>
 
 </body>

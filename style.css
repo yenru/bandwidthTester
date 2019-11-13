@@ -1,0 +1,53 @@
+body {
+    margin: 0;
+    font-family: 微軟正黑體;
+}
+h1 {
+    margin: 0;
+    padding: 20px;
+    background-color: #dc3632;
+    color: white;
+    font-size: 1.4em;
+}
+#statusMsg {
+    color: #598602;
+    text-align: center;
+}
+#buttonBar {
+    margin: 1em;
+    text-align: center;
+}
+#buttonBar button {
+    padding: 10px 20px;
+    border: 1px solid #025357;
+    border-radius: 10px;
+    outline: 0;
+    background-color: #0e6a6e;
+    color: white;
+    font-weight: bolder;
+    font-size: larger;
+    font-family: 微軟正黑體;
+}
+#buttonBar button:hover {
+    border: 2px solid #1f8085;
+}
+#buttonBar button:active {
+    color: #025357;
+    background-color: #5dacaf;
+}
+#stopBtn, #downloadBtn {
+    display: none;
+}
+#buttonBar #downloadBtn {
+    background-color: #598602;
+}
+#buttonBar #downloadBtn:active {
+    color: #1f8085;
+    background-color: #caf17f;
+}
+span.error {
+    color: red;
+}
+canvas {
+    display: none;
+}
