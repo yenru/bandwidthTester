@@ -50,6 +50,8 @@ function calcAverage(num1,num2){
 <script>
 (function() {
     var speedStatus = 0;    //0:關閉中; 1:開啟中
+    var maxTimes = 100;
+    var count = 0;
     var $startBtn = $("#startBtn");
     var $stopBtn = $("#stopBtn");
     var $statusMsg = $("#statusMsg");
@@ -59,10 +61,13 @@ function calcAverage(num1,num2){
     var chartData;
     function initData() {
         chartData = [];
-        chartData.push({
-            x: new Date().getTime(),
-            y: '0'
-        });
+        count = 0;
+        for(var i=1; i<=maxTimes; i++) {
+            chartData.push({
+                x: i,
+                y: '0'
+            });
+        }
     }
     initData();
     
@@ -73,20 +78,27 @@ function calcAverage(num1,num2){
         xkey: 'x',
         ykeys: ['y'],
         labels: ['Response time'],
-        parseTime: true,
+        parseTime: false,
+        // ymin: '0',
+        // ymax: '100',
         ymin: 'auto',
         ymax: 'auto',
-        postUnits: ' s',
-        hideHover: true
+        yLabelFormat: function (y) { return y.toFixed(2) + ' Mbps'; },
+        smooth: false,
+        eventStrokeWidth: 10,
+        postUnits: ' Mbps',
+        hideHover: true,
+        resize: true
     });
 
     $startBtn.click(function(e){
         $startBtn.hide();
-        $stopBtn.show();
+        // $stopBtn.show();
+        // chartData = [];
         initData();
-        speedGraph.setData(chartData);
 
-        $statusMsg.text("開始測速。第一次下載可能速度較慢，請耐心等候。");
+        // $statusMsg.text("開始測速。第一次下載可能速度較慢，請耐心等候。");
+        $statusMsg.text("測速中… 0 /" + maxTimes);
         speedStatus = 1;
         TestResponse();
         $downloadBtn.hide();
@@ -97,7 +109,7 @@ function calcAverage(num1,num2){
         $startBtn.show();
         $stopBtn.hide();
         if(chartData.length > 1) {
-            $statusMsg.text("測試結束。");
+            // $statusMsg.text("測試結束。");
             $downloadBtn.show();
         }
         else {
@@ -115,14 +127,20 @@ function calcAverage(num1,num2){
         doc.save('speedtest-result.pdf');
     });
     
-    // var fileSize = 10503578;
+    var fileSize = 2114812;
     function TestResponse() {
         var sendDate = Date.now();
-        const request = new Request('http://test-cds.cdn.hinet.net/test_010m.zip', {cache: "no-store"});
+        const request = new Request('https://4gtvfreepcvod-cds.cdn.hinet.net/vod_4gtv/_definst_/smil:4gtv/2019/201812270001-1-C-20190118_0000002/4gtv-hls-high.smil/media_b6000000_2.ts', {cache: "no-store"});
 
         fetch(request).then(res => res.blob().then(blob => {
             var receiveDate = Date.now();
-            var response = receiveDate - sendDate;
+            // var response = receiveDate - sendDate;
+            var duration = (receiveDate - sendDate) / 1000;
+            var bitsLoaded = fileSize * 8;
+            var speedBps = (bitsLoaded / duration).toFixed(2);
+            var speedKbps = (speedBps / 1024).toFixed(2);
+            var speedMbps = (speedKbps / 1024).toFixed(2);
+            var response = speedMbps;
 
             testCallback(response);
         }))
@@ -134,12 +152,18 @@ function calcAverage(num1,num2){
 
     function testCallback(val) {
         if(speedStatus == 1) {
-            TestResponse();
-            chartData.push({
-                x: new Date().getTime(),
-                y: (val / 1000).toFixed(2)
-            });
+            // TestResponse();
+            // chartData.push({
+            //     x: chartData.length+1,
+            //     y: val
+            // });
+            chartData[count].y = val;
             speedGraph.setData(chartData);
+
+            count++;
+            $statusMsg.text("測速中… " + count + " /" + maxTimes);
+            if(count < maxTimes) TestResponse();
+            else testStop();
         }
     }
 })();
