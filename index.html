@@ -1,173 +1,187 @@
 ﻿<!DOCTYPE html>
 <html>
+
 <head>
     <title>四季頻寬測試</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=on">
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.css" />
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/raphael/2.1.0/raphael-min.js"></script>
     <script src="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/canvg/1.5/canvg.min.js"></script>
+    <script src="//html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/canvg/1.5/canvg.min.js"></script>
     <script src="//unpkg.com/jspdf@latest/dist/jspdf.min.js"></script>
-<script>
-var getRequest = function() {
-	var obj = {};
-	var uri = location.search;
-	if(uri) {
-		var name = uri.replace('?', '').split("&");
-		for (var i = 0; i < name.length; i++) {
-			obj[name[i].split('=')[0]] = name[i].split('=')[1] || '';
-		}
-		return obj;
-	}
-	return null;
-};
-function calcAverage(num1,num2){
-    if(num2 == 0){
-        return num1;
-    }else if(num1 == 0){
-        return num2;
-    }else{
-        return ((parseFloat(num1)+parseFloat(num2))/2).toFixed(2)
-    }
-}
-</script>
+    <script>
+        //速率單位轉換(Mbps)
+        function speedConverter(bytes) {
+            var bitsLoaded = (bytes) * 8;
+            var speedBps = bitsLoaded.toFixed(2);
+            var speedKbps = (speedBps / 1024).toFixed(2);
+            var speedMbps = (speedKbps / 1024).toFixed(2);
+            return speedMbps;
+        }
+    </script>
 </head>
+
 <body>
 
     <h1>四季線上影視測速工具</h1>
     <p id="statusMsg"></p>
-    <div id="speed-graph" style="height: 250px;"></div>
+    <div id="speed-graph"></div>
     <div id="buttonBar">
         <button id="startBtn">開始測速</button>
-        <button id="stopBtn">停止測速</button>
         <button id="downloadBtn">下載結果</button>
     </div>
     <br /><canvas id="canvas"></canvas>
 
-<script>
-(function() {
-    var speedStatus = 0;    //0:關閉中; 1:開啟中
-    var maxTimes = 100;
-    var count = 0;
-    var $startBtn = $("#startBtn");
-    var $stopBtn = $("#stopBtn");
-    var $statusMsg = $("#statusMsg");
-    var $downloadBtn = $("#downloadBtn");
+    <script>
+        (function () {
+            var unitStr = ' Mbps';  //顯示的速率單位
+            var maxSecs = 60;       //測速的時間/秒
 
-    /** Chart Data init **/
-    var chartData;
-    function initData() {
-        chartData = [];
-        count = 0;
-        for(var i=1; i<=maxTimes; i++) {
-            chartData.push({
-                x: i,
-                y: '0'
+            var runSecs;        //已執行的秒數
+            var countFiles;     //已下載的檔案數
+            var lastReceived;   //前次(秒)收到的bytes
+            var totalReceived;  //目前收到的bytes
+            var chartData;      //繪圖資料集
+
+            /** 初始化物件選擇器 **/
+            var $startBtn = $("#startBtn");
+            var $statusMsg = $("#statusMsg");
+            var $downloadBtn = $("#downloadBtn");
+
+            /** 初始化測試資料 **/
+            function initData() {
+                /** 清除上次執行的結果 **/
+                chartData = [];
+                runSecs = 0;
+                countFiles = 0;
+                lastReceived = 0;
+                totalReceived = 0;
+
+                /** 預設x軸刻度 **/
+                for (var i = 1; i <= maxSecs; i++) {
+                    chartData.push({
+                        x: i,
+                        y: '0'
+                    });
+                }
+            }
+            initData();
+
+            /** 初始化 Morris.js 物件 **/
+            var speedGraph = Morris.Line({
+                element: 'speed-graph',
+                data: chartData,
+                xkey: 'x',
+                ykeys: ['y'],
+                labels: ['Response time'],
+                parseTime: false,
+                ymin: 'auto',
+                ymax: 'auto',
+                yLabelFormat: function (y) { return y.toFixed(2) + unitStr; },
+                smooth: false,
+                eventStrokeWidth: 10,
+                postUnits: unitStr,
+                hideHover: true,
+                resize: true
             });
-        }
-    }
-    initData();
-    
-    /** Morris Chart **/
-    var speedGraph = Morris.Line({
-        element: 'speed-graph',
-        data: chartData,
-        xkey: 'x',
-        ykeys: ['y'],
-        labels: ['Response time'],
-        parseTime: false,
-        // ymin: '0',
-        // ymax: '100',
-        ymin: 'auto',
-        ymax: 'auto',
-        yLabelFormat: function (y) { return y.toFixed(2) + ' Mbps'; },
-        smooth: false,
-        eventStrokeWidth: 10,
-        postUnits: ' Mbps',
-        hideHover: true,
-        resize: true
-    });
 
-    $startBtn.click(function(e){
-        $startBtn.hide();
-        // $stopBtn.show();
-        // chartData = [];
-        initData();
+            /** 開始按鈕設定 **/
+            $startBtn.click(function (e) {
+                $startBtn.hide();
+                $downloadBtn.hide();
+                $statusMsg.text("測速中… 0s /" + maxSecs + "s");
+                initData();
 
-        // $statusMsg.text("開始測速。第一次下載可能速度較慢，請耐心等候。");
-        $statusMsg.text("測速中… 0 /" + maxTimes);
-        speedStatus = 1;
-        TestResponse();
-        $downloadBtn.hide();
-    });
-    $stopBtn.click(testStop);
-    function testStop() {
-        speedStatus = 0;
-        $startBtn.show();
-        $stopBtn.hide();
-        if(chartData.length > 1) {
-            // $statusMsg.text("測試結束。");
-            $downloadBtn.show();
-        }
-        else {
-            $statusMsg.text("沒有下載任何檔案，請耐心等候一段時間。");
-        }
-    };
-    $downloadBtn.click(function(e){
-        var svg = $("#speed-graph").html();
-        var canvas = document.getElementById('canvas');
-        canvg(canvas, svg.split("<div")[0]);
+                TestResponse();
+                setTimeout(showProgress, 1000);
+            });
+            /** 下載按鈕設定 **/
+            $downloadBtn.click(function (e) {
+                html2canvas($statusMsg[0]).then(desc => {
+                    var svg = $("#speed-graph").html();
+                    var canvas = document.getElementById('canvas');
+                    canvg(canvas, svg.split("<div")[0]);
 
-        var imgData = canvas.toDataURL('image/png');
-        var doc = new jsPDF('l', 'mm');
-        doc.addImage(imgData, 'PNG', 10, 10);
-        doc.save('speedtest-result.pdf');
-    });
-    
-    var fileSize = 2114812;
-    function TestResponse() {
-        var sendDate = Date.now();
-        const request = new Request('https://4gtvfreepcvod-cds.cdn.hinet.net/vod_4gtv/_definst_/smil:4gtv/2019/201812270001-1-C-20190118_0000002/4gtv-hls-high.smil/media_b6000000_2.ts', {cache: "no-store"});
+                    var doc = new jsPDF('l', 'mm');
+                    var descData = desc.toDataURL('image/png');
+                    var imgData = canvas.toDataURL('image/png');
+                    doc.addImage(descData, 'PNG', 10, 10);
+                    doc.addImage(imgData, 'PNG', 10, 30);
+                    doc.save('speedtest-result.pdf');
+                });
+            });
 
-        fetch(request).then(res => res.blob().then(blob => {
-            var receiveDate = Date.now();
-            // var response = receiveDate - sendDate;
-            var duration = (receiveDate - sendDate) / 1000;
-            var bitsLoaded = fileSize * 8;
-            var speedBps = (bitsLoaded / duration).toFixed(2);
-            var speedKbps = (speedBps / 1024).toFixed(2);
-            var speedMbps = (speedKbps / 1024).toFixed(2);
-            var response = speedMbps;
+            /** 測試結束 **/
+            function testStop() {
+                $startBtn.show();
 
-            testCallback(response);
-        }))
-        .catch(function(err) {
-            testStop();
-            $statusMsg.html("<span class=\"error\">發生錯誤，請參考錯誤訊息："+err.message+"<span>");
-        });
-    }
+                if (totalReceived != 0) {
+                    $statusMsg.html(
+                        "平均每秒下載的串流檔數量：" + (countFiles / maxSecs) +
+                        "<br />平均每秒下載的檔案大小：" + speedConverter(totalReceived / maxSecs) + unitStr
+                    );
+                    $downloadBtn.show();
+                }
+            };
 
-    function testCallback(val) {
-        if(speedStatus == 1) {
-            // TestResponse();
-            // chartData.push({
-            //     x: chartData.length+1,
-            //     y: val
-            // });
-            chartData[count].y = val;
-            speedGraph.setData(chartData);
+            /** 判斷測試是否完成 **/
+            function isFinished() {
+                return runSecs >= maxSecs;
+            }
 
-            count++;
-            $statusMsg.text("測速中… " + count + " /" + maxTimes);
-            if(count < maxTimes) TestResponse();
-            else testStop();
-        }
-    }
-})();
-</script>
+            /** 請求下載檔案 **/
+            function TestResponse() {
+                const request = new Request('https://4gtvfreepcvod-cds.cdn.hinet.net/vod_4gtv/_definst_/smil:4gtv/2019/201812270001-1-C-20190118_0000002/4gtv-hls-high.smil/media_b6000000_2.ts', { cache: "no-store" });
+
+                // 參考資料：https://javascript.info/fetch-progress
+                // Step 1: start the fetch and obtain a reader
+                fetch(request).then(async function (response) {
+                    const reader = response.body.getReader();
+
+                    // Step 3: read the data
+                    let receivedLength = 0; // received that many bytes at the moment
+                    while (true) {
+                        const { done, value } = await reader.read();
+
+                        if (done) {
+                            break;
+                        }
+
+                        receivedLength += value.length;
+                        totalReceived += value.length;
+                    }
+                    countFiles++;
+
+                    //測試未完成，繼續請求檔案
+                    if (!isFinished()) TestResponse();
+
+                }).catch(function (err) {
+                    testStop();
+                    $statusMsg.html("<span class=\"error\">發生錯誤，請參考錯誤訊息：" + err.message + "<span>");
+                });
+            }
+
+            /** 顯示測試過程 **/
+            function showProgress() {
+                //設定資料集並繪圖
+                chartData[runSecs].y = speedConverter(totalReceived - lastReceived);
+                speedGraph.setData(chartData);
+
+                //更新控制參數
+                runSecs++;
+                lastReceived = totalReceived;
+                $statusMsg.text("測速中… " + runSecs + "s /" + maxSecs + "s");
+
+                if (isFinished()) testStop();
+                else setTimeout(showProgress, 1000);
+            }
+        })();
+    </script>
 
 </body>
+
 </html>

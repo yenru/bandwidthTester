@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>四季頻寬測試</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=on">
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.css" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/raphael/2.1.0/raphael-min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/morris.js/0.5.1/morris.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/canvg/1.5/canvg.min.js"></script>
+    <script src="//unpkg.com/jspdf@latest/dist/jspdf.min.js"></script>
+    <script>
+        var getRequest = function () {
+            var obj = {};
+            var uri = location.search;
+            if (uri) {
+                var name = uri.replace('?', '').split("&");
+                for (var i = 0; i < name.length; i++) {
+                    obj[name[i].split('=')[0]] = name[i].split('=')[1] || '';
+                }
+                return obj;
+            }
+            return null;
+        };
+        function calcAverage(num1, num2) {
+            if (num2 == 0) {
+                return num1;
+            } else if (num1 == 0) {
+                return num2;
+            } else {
+                return ((parseFloat(num1) + parseFloat(num2)) / 2).toFixed(2)
+            }
+        }
+    </script>
+</head>
+
+<body>
+
+    <h1>四季線上影視測速工具</h1>
+    <p id="statusMsg"></p>
+    檔案下載進度條：<progress id="file-progress" value="0" max="1"></progress>
+    <div id="speed-graph"></div>
+    <div id="buttonBar">
+        <button id="startBtn">開始測速</button>
+        <button id="stopBtn">停止測速</button>
+        <button id="downloadBtn">下載結果</button>
+    </div>
+    <br /><canvas id="canvas"></canvas>
+
+    <script>
+        (function () {
+            var speedStatus = 0;    //0:關閉中; 1:開啟中
+            var maxTimes = 100;
+            var lastReceived = 0;
+            var totalReceived = 0;
+            var $startBtn = $("#startBtn");
+            var $stopBtn = $("#stopBtn");
+            var $statusMsg = $("#statusMsg");
+            var $downloadBtn = $("#downloadBtn");
+            var $progress = $("#file-progress");
+
+            /** Chart Data init **/
+            var chartData;
+            function initData() {
+                chartData = [];
+                chartData.push({
+                    x: 0,
+                    y: '0'
+                });
+            }
+            initData();
+
+            /** Morris Chart **/
+            var speedGraph = Morris.Line({
+                element: 'speed-graph',
+                data: chartData,
+                xkey: 'x',
+                ykeys: ['y'],
+                labels: ['Response time'],
+                parseTime: false,
+                ymin: 'auto',
+                ymax: 'auto',
+                yLabelFormat: function (y) { return y.toFixed(2) + ' Mbps'; },
+                smooth: false,
+                eventStrokeWidth: 10,
+                postUnits: ' Mbps',
+                hideHover: true,
+                resize: true
+            });
+
+            $startBtn.click(function (e) {
+                if($progress.val() != 0 && $progress.val() != 1) {
+                    $statusMsg.text("請先等候先前的檔案下載完畢再重新開始。");
+                    return;
+                }
+                $startBtn.hide();
+                $stopBtn.show();
+                chartData = [];
+
+                // $statusMsg.text("開始測速。第一次下載可能速度較慢，請耐心等候。");
+                // $statusMsg.text("測速中… 0 /" + maxTimes);
+                $statusMsg.text("");
+                speedStatus = 1;
+                TestResponse();
+                setTimeout(showProgress, 1000);
+                $downloadBtn.hide();
+            });
+            $stopBtn.click(testStop);
+            function testStop() {
+                speedStatus = 0;
+                $startBtn.show();
+                $stopBtn.hide();
+                if (chartData.length > 10) {
+                    $statusMsg.text("");
+                    $downloadBtn.show();
+                }
+                else {
+                    $statusMsg.text("測速時間太短，請耐心等候一段時間。");
+                }
+            };
+            $downloadBtn.click(function (e) {
+                var svg = $("#speed-graph").html();
+                var canvas = document.getElementById('canvas');
+                canvg(canvas, svg.split("<div")[0]);
+
+                var imgData = canvas.toDataURL('image/png');
+                var doc = new jsPDF('l', 'mm');
+                doc.addImage(imgData, 'PNG', 10, 10);
+                doc.save('speedtest-result.pdf');
+            });
+
+            function TestResponse() {
+                const request = new Request('http://test-cds.cdn.hinet.net/test_010m.zip', { cache: "no-store" });
+
+                // https://javascript.info/fetch-progress
+                // Step 1: start the fetch and obtain a reader
+                fetch(request).then(async function (response) {
+                    const reader = response.body.getReader();
+                    // Step 2: get total length
+                    const contentLength = +response.headers.get('Content-Length');
+
+                    // Step 3: read the data
+                    let receivedLength = 0; // received that many bytes at the moment
+                    while (true) {
+                        const { done, value } = await reader.read();
+
+                        if (done) {
+                            break;
+                        }
+
+                        receivedLength += value.length;
+                        totalReceived += value.length;
+
+                        $progress.val((receivedLength / contentLength).toFixed(2));
+                    }
+
+                    if (speedStatus == 1) TestResponse();
+                    else $statusMsg.text("");
+                }).catch(function (err) {
+                    testStop();
+                    $statusMsg.html("<span class=\"error\">發生錯誤，請參考錯誤訊息：" + err.message + "<span>");
+                });
+            }
+
+            function showProgress() {
+                if (speedStatus == 1) {
+                    var bitsLoaded = (totalReceived - lastReceived) * 8;
+                    var speedBps = bitsLoaded.toFixed(2);
+                    var speedKbps = (speedBps / 1024).toFixed(2);
+                    var speedMbps = (speedKbps / 1024).toFixed(2);
+
+                    chartData.push({
+                        x: chartData.length + 1,
+                        y: speedMbps
+                    });
+                    speedGraph.setData(chartData);
+
+                    lastReceived = totalReceived;
+                    // if($progress.val() != 1) 
+                    setTimeout(showProgress, 1000);
+                }
+            }
+        })();
+    </script>
+
+</body>
+
+</html>

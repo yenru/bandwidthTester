@@ -1,6 +1,7 @@
 body {
     margin: 0;
     font-family: 微軟正黑體;
+    text-align: center;
 }
 h1 {
     margin: 0;
@@ -11,11 +12,18 @@ h1 {
 }
 #statusMsg {
     color: #598602;
-    text-align: center;
+    width: 250px;
+    width: fit-content;
+    margin: 20px auto;
+    text-align: left;
+    white-space: nowrap;
+}
+#speed-graph {
+    max-width: 1050px;
+    margin: auto;
 }
 #buttonBar {
     margin: 1em;
-    text-align: center;
 }
 #buttonBar button {
     padding: 10px 20px;
